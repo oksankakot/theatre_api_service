@@ -1,7 +1,6 @@
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
-
-from django.conf import settings
 from django.core.exceptions import ValidationError
 
 
@@ -26,10 +25,6 @@ class Actor(models.Model):
     last_name = models.CharField(max_length=63)
 
     def __str__(self):
-        return self.first_name + " " + self.last_name
-
-    @property
-    def full_name(self):
         return f"{self.first_name} {self.last_name}"
 
 
@@ -44,88 +39,62 @@ class Play(models.Model):
 
 
 class Performance(models.Model):
-    play = models.ForeignKey(Play,
-                             on_delete=models.CASCADE,
-                             related_name="performances")
-    theatre_hall = models.ForeignKey(TheatreHall,
-                                     on_delete=models.DO_NOTHING,
-                                     related_name="theatre_hall",
-                                     null=True,
-                                     default=None)
+    play = models.ForeignKey(Play, on_delete=models.CASCADE, related_name="performances")
+    theatre_hall = models.ForeignKey(TheatreHall, on_delete=models.DO_NOTHING, related_name="performances")
     show_time = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
-        return (f"{self.play}, "
-                f"{self.theatre_hall.name}, "
-                f"{self.show_time}")
+        return f"{self.play}, {self.theatre_hall.name}, {self.show_time}"
 
 
 class Reservation(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE
-    )
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
 
     def __str__(self):
         return str(self.created_at)
 
 
+class TicketManager(models.Manager):
+    def validate_ticket(self, row, seat, performance):
+        theatre_hall = performance.theatre_hall
+
+        max_row = theatre_hall.rows
+        max_seat = theatre_hall.seats_in_row
+
+        if not (1 <= row <= max_row and 1 <= seat <= max_seat):
+            raise ValidationError(
+                f"Number of row and seat must be in diapason (1, {max_row}) and (1, {max_seat}) respectively."
+            )
+
+        if self.filter(performance=performance, row=row, seat=seat).exists():
+            raise ValidationError(
+                "The selected row and seat are already occupied for this performance."
+            )
+
+
 class Ticket(models.Model):
     row = models.IntegerField()
     seat = models.IntegerField()
-    performance = models.ForeignKey(
-        Performance,
-        on_delete=models.DO_NOTHING,
-        related_name="tickets",
-        blank=True,
-        default=Performance.objects.create,
-    )
-    reservation = models.ForeignKey(
-        Reservation,
-        on_delete=models.CASCADE,
-        related_name="tickets",
-    )
+    performance = models.ForeignKey(Performance, on_delete=models.DO_NOTHING, related_name="tickets")
+    reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE, related_name="tickets")
 
-    @staticmethod
-    def validate_ticket(row, seat, theatre_hall):
-        for ticket_attr_value, ticket_attr_name, theatre_hall_attr_name in [
-            (row, "row", "rows"),
-            (seat, "seat", "seats_in_row"),
-        ]:
-            count_attrs = getattr(theatre_hall, theatre_hall_attr_name)
-            if not (1 <= ticket_attr_value <= count_attrs):
-                raise ValidationError(
-                    {
-                        ticket_attr_name: f"{ticket_attr_name} "
-                                          f"number must be in available range: "
-                                          f"(1, {theatre_hall_attr_name}): "
-                                          f"(1, {count_attrs})"
-                    }
-                )
+    objects = TicketManager()
 
     def clean(self):
-        Ticket.validate_ticket(
-            self.row,
-            self.seat,
-            self.performance.theatre_hall,
-        )
+        performance = self.performance
+        if isinstance(performance, Performance):
+            theatre_hall = performance.theatre_hall
+            if isinstance(theatre_hall, TheatreHall):
+                Ticket.objects.validate_ticket(self.row, self.seat, performance)
 
-    def save(
-            self,
-            force_insert=False,
-            force_update=False,
-            using=None,
-            update_fields=None,
-    ):
-        self.full_clean()
-        return super(Ticket, self).save(
-            force_insert, force_update, using, update_fields
-        )
+    def save(self, *args, **kwargs):
+        if not self.id:
+            self.full_clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return (
-            f"{str(self.performance)} (row: {self.row}, seat: {self.seat})"
-        )
+        return f"{self.performance} (row: {self.row}, seat: {self.seat})"
 
     class Meta:
         unique_together = ("performance", "row", "seat")
