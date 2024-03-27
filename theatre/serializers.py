@@ -2,13 +2,13 @@ from django.db import transaction
 from rest_framework import serializers
 
 from .models import (
+    Actor,
+    Genre,
     Performance,
     Play,
-    TheatreHall,
-    Genre,
-    Actor,
-    Ticket,
     Reservation,
+    TheatreHall,
+    Ticket,
 )
 
 
@@ -44,8 +44,8 @@ class PlaySerializer(serializers.ModelSerializer):
 
 
 class PlayListSerializer(PlaySerializer):
-    actors = ActorSerializer(many=True)
-    genres = GenreSerializer(many=True)
+    actors = ActorSerializer(many=True, read_only=True)
+    genres = GenreSerializer(many=True, read_only=True)
 
     class Meta:
         model = Play
@@ -122,7 +122,7 @@ class TicketSerializer(serializers.ModelSerializer):
 
 
 class ReservationSerializer(serializers.ModelSerializer):
-    tickets = TicketSerializer(many=True, read_only=True, allow_empty=False)
+    tickets = TicketSerializer(many=True, allow_empty=False)
 
     class Meta:
         model = Reservation
@@ -176,8 +176,20 @@ class ActorListSerializer(ActorSerializer):
                   "last_name")
 
 
+class GenreDetailSerializer(GenreSerializer):
+    class Meta:
+        model = Genre
+        fields = ("id", "name")
+
+
 class TicketListSerializer(TicketSerializer):
     pass
+
+
+class TicketDetailSerializer(TicketSerializer):
+    class Meta:
+        model = Ticket
+        fields = ("id", "row", "seat", "performance", "reservation")
 
 
 class ReservationListSerializer(ReservationSerializer):
@@ -186,3 +198,9 @@ class ReservationListSerializer(ReservationSerializer):
         fields = ("id",
                   "created_at",
                   "user")
+
+
+class ReservationDetailSerializer(ReservationSerializer):
+    class Meta:
+        model = Reservation
+        fields = ("id", "created_at", "user", "tickets")
