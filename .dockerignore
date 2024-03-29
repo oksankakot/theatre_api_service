@@ -1,0 +1,7 @@
+.venv/
+Dockerfile
+.env
+README.md
+.idea
+docker-compose.yaml
+.env.sample
